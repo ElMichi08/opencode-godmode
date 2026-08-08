@@ -48,9 +48,13 @@ de 1.500 tokens.
 5. **Reversible:** `uninstall.sh` deja el sistema como estaba. Backup automático de
    toda config que opencode-godmode toque directamente, con timestamp — pero solo
    si el contenido a modificar cambió respecto al último backup existente, para no
-   acumular copias idénticas en reinstalaciones idempotentes. `uninstall.sh`
-   restaura por defecto el backup más reciente, con opción de listar y elegir uno
-   anterior. (gentle-ai hace sus propios backups de lo suyo; no duplicarlos.)
+   acumular copias idénticas en reinstalaciones idempotentes. La estrategia de
+   reversión de `uninstall.sh` no es uniforme, y es intencional (ver 4.6): para
+   AGENTS.md el default es remover el bloque por sus propios delimitadores
+   (restaurar-desde-backup queda como alternativa explícita, solo interactiva);
+   para rtk-config.toml, que no tiene delimitadores, sí es restaurar por
+   defecto el backup más reciente, con opción de listar y elegir uno anterior.
+   (gentle-ai hace sus propios backups de lo suyo; no duplicarlos.)
 6. **Legible:** el instalador completo debe poder leerse en 10 minutos. Bash +
    coreutils + curl + jq como máximo para toda la lógica del instalador.
    Excepción única y acotada: `python3` (stdlib, sin dependencias externas) solo
@@ -145,52 +149,72 @@ reabra el TUI de gentle-ai. Los pasos 6, 8 y 9 son por-proyecto y siempre corren
 3. **gentle-ai — binario (saltar si `gentle-ai --version` ya responde):**
    instalar vía su script oficial
    (`https://raw.githubusercontent.com/Gentleman-Programming/gentle-ai/main/scripts/install.sh`).
-   Verificar con `gentle-ai --version` (o el comando de versión que exista;
-   confirmar en fase de investigación). Decisión ya tomada (registrar en
-   DECISIONS.md, no requiere investigación): se usa curl directo y NO brew, a
-   diferencia de SETUP-STACK.md que prioriza brew — v1 es Linux Debian/Ubuntu-
-   based, donde linuxbrew no es garantía, y mantener una sola vía de instalación
-   simplifica el script (principio 6).
+   Verificar con `gentle-ai --version` (equivalentes confirmados: `gentle-ai
+   version`, `gentle-ai -v`). Decisión ya tomada (registrada en
+   DECISIONS.md): se usa curl directo y NO brew, a diferencia de
+   SETUP-STACK.md que prioriza brew — v1 es Linux Debian/Ubuntu-based, donde
+   linuxbrew no es garantía, y mantener una sola vía de instalación
+   simplifica el script (principio 6). Nota: el instalador oficial de
+   gentle-ai deja el binario en `~/.local/bin` sin tocar `.bashrc` (a
+   diferencia del instalador de OpenCode, que sí lo hace) — `install.sh`
+   exporta ese PATH él mismo al arrancar para que la detección de "ya
+   instalado" (principio 9) funcione incluso en una terminal nueva. rtk hace
+   lo mismo, misma solución.
 4. **gentle-ai — configuración de agentes (HUMAN GATE 1, saltar si la
-   verificación programática de 4.2.1 ya pasa):** intentar el camino
-   no-interactivo si la fase de investigación encontró uno (flags CLI o variables
-   de entorno para seleccionar OpenCode). Si no existe, implementar el gate
-   bloqueante según el patrón obligatorio de la sección 4.2.1 — que ahora verifica
-   primero y solo abre el TUI si la verificación falla. Esto NO viola el
-   principio 1: es interacción de terminal, cero tokens de agente.
+   verificación programática de 4.2.1 ya pasa):** camino primario confirmado
+   y 100% no-interactivo: `gentle-ai install --agent opencode --preset
+   full-gentleman --sdd-mode multi --scope=global` (validado en vivo contra
+   gentle-ai 2.3.0: 64/64 checks, `opencode.json` real con el orquestador
+   presente). El gate bloqueante con TUI de la sección 4.2.1 pasa a ser el
+   **fallback** para una versión de gentle-ai vieja que no traiga esos flags
+   (detectable con `gentle-ai install --help | grep -q -- '--agent'`) — no es
+   el camino primario. Esto NO viola el principio 1: es interacción de
+   terminal, cero tokens de agente.
 5. **Verificación gentle-ai + Engram (siempre corre; rápida y no destructiva):**
    `gentle-ai doctor` debe reportar sano; `engram version` responde (gentle-ai lo
-   instala); ciclo save/search/delete de una memoria de prueba con la CLI de
-   engram.
+   instala); ciclo save/search/delete de una memoria de prueba con la CLI real
+   de engram: `engram save <título> <mensaje> --project <nombre>` (el output
+   trae el id, `Memory saved: #<id> "<título>" (...)`), `engram search
+   <query> --project <nombre>`, `engram delete <id> --hard`. Esta CLI es
+   distinta de las tools MCP `mem_save`/`mem_search` que usa el agente (esas
+   sí están bien nombradas en §5 — son la interfaz MCP, no la CLI standalone).
 6. **Perfiles de modelo por fase:** crear vía CLI usando stack.conf, replicando la
    lógica del runbook manual (SETUP-STACK.md Fase 2.2): exploración e
    implementación heredan el modelo barato del perfil base; solo diseño y review
-   reciben override explícito. `sdd-implement` NO se sincroniza como fase aparte
-   salvo que el usuario haya puesto un MODEL_IMPLEMENT distinto de MODEL_EXPLORE:
+   reciben override explícito. `sdd-apply` (la fase de implementación — ver nota
+   de nombres abajo) NO se sincroniza como fase aparte salvo que el usuario haya
+   puesto un MODEL_IMPLEMENT distinto de MODEL_EXPLORE:
    ```bash
    gentle-ai sync --profile ${PROFILE_NAME}:${MODEL_EXPLORE}
    gentle-ai sync --profile-phase ${PROFILE_NAME}:sdd-design:${MODEL_DESIGN}
-   gentle-ai sync --profile-phase ${PROFILE_NAME}:sdd-review:${MODEL_REVIEW}
+   gentle-ai sync --profile-phase ${PROFILE_NAME}:sdd-verify:${MODEL_REVIEW}
    # Solo si MODEL_IMPLEMENT está seteado y difiere de MODEL_EXPLORE:
-   gentle-ai sync --profile-phase ${PROFILE_NAME}:sdd-implement:${MODEL_IMPLEMENT}
+   gentle-ai sync --profile-phase ${PROFILE_NAME}:sdd-apply:${MODEL_IMPLEMENT}
    ```
-   (Nombres exactos de las fases: confirmarlos en la fase de investigación contra
-   la documentación actual de gentle-ai y registrar en DECISIONS.md. Confirmar en
-   particular si `sdd-implement` existe como fase independiente — el runbook
-   manual, que ya se ejecutó, asume que implementar siempre hereda del perfil
-   base y nunca la sincroniza aparte.)
-7. **rtk** (si WITH_RTK; saltar instalación del binario y `rtk init -g --opencode`
-   si `rtk --version` y `rtk init --show` ya lo confirman instalado — el merge de
-   `rtk-config.toml` sí corre siempre, es idempotente): instalar vía script
-   oficial
+   **Nombres de fase confirmados (10 en total, todas prefijo `sdd-`):** init,
+   explore, propose, spec, design, tasks, **apply** (esta es "implementar" —
+   `sdd-implement` NO existe), **verify** (esta es "review" — `sdd-review` NO
+   existe; gentle-ai lo rechaza con `unknown phase "sdd-review"`), archive,
+   onboard. `sdd-apply` es una fase de primera clase como cualquier otra, no
+   tiene herencia implícita especial más allá de lo que tendría cualquier fase
+   sin asignar (cae al modelo base del perfil).
+7. **rtk** (si WITH_RTK; saltar instalación del binario y `rtk init -g
+   --opencode --auto-patch` si `rtk --version` y `rtk init --show` ya lo
+   confirman instalado — el merge de `rtk-config.toml` sí corre siempre, es
+   idempotente): instalar vía script oficial
    (`https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh`;
    misma razón que el paso 3 para omitir brew), verificar con `rtk gain` (detecta
-   la colisión de nombre con el paquete equivocado de crates.io), ejecutar
-   `rtk init -g --opencode`, y aplicar `templates/rtk-config.toml` a
-   `~/.config/rtk/config.toml` con un merge no-destructivo hecho en python3
-   (stdlib `tomllib` para leer, escritura manual o `tomli-w` si hace falta —
-   confirmar en fase de investigación la vía más simple sin dependencias
-   externas; no pisar exclusiones previas del usuario).
+   la colisión de nombre con el paquete equivocado de crates.io "Rust Type Kit"),
+   ejecutar `rtk init -g --opencode --auto-patch` (no-interactivo confirmado), y
+   aplicar `templates/rtk-config.toml` a `~/.config/rtk/config.toml` con un merge
+   no-destructivo en python3: `tomllib` (stdlib) solo para LEER y para VALIDAR el
+   resultado antes de escribir — nunca para reserializar el archivo completo
+   (perdería comentarios/formato). La escritura es una inserción de línea
+   idempotente y quirúrgica: si falta una sección entera del template, se agrega
+   completa al final; si la sección existe pero le falta una key, se inserta esa
+   línea justo debajo del header de la sección. Ninguna línea que el usuario ya
+   tenía se toca nunca — así se garantiza no pisar sus exclusiones previas sin
+   necesitar un serializador TOML (que tampoco existe en stdlib).
 8. **AGENTS.md:** renderizar `templates/AGENTS.md.block` (según WITH_BDD y
    BDD_DIR) e insertarlo en el AGENTS.md del proyecto actual (crear si no existe),
    entre delimitadores `<!-- stack-optimizacion:begin -->` /
@@ -225,16 +249,22 @@ Prohibido usar confirmaciones tipo "¿salió todo bien? [s/n]" como criterio de
 avance.
 
 **Gate 1 — TUI de gentle-ai (bloqueante, dentro del script).** Único gate de este
-tipo. Es condicional: si la investigación (fase 8.1) encuentra camino
-no-interactivo, este gate no se implementa y se reemplaza por comandos.
+tipo. **Confirmado: en la versión actual de gentle-ai (2.3.0) NO hace falta** —
+`gentle-ai install --agent opencode --preset full-gentleman --sdd-mode multi
+--scope=global` cubre exactamente lo que este gate haría, de forma 100%
+no-interactiva. Este gate queda como **fallback** para una gentle-ai vieja sin
+esos flags (detectable con `gentle-ai install --help | grep -q -- '--agent'`
+antes de decidir cuál camino tomar).
 
 Aprovechar que el TUI es un proceso de terminal bloqueante: bash espera solo, sin
-polling ni señales. Estructura de referencia (adaptar nombres reales de comandos
-y checks según hallazgos de la investigación):
+polling ni señales. Estructura de referencia (nombres de comandos y checks ya
+confirmados contra gentle-ai real):
 
 ```bash
 verificar_gate1() {
-    gentle-ai doctor >/dev/null 2>&1 && config_opencode_contiene_orquestador  # check con jq
+    gentle-ai doctor >/dev/null 2>&1 || return 1
+    jq -e '.installed_agents | index("opencode")' ~/.gentle-ai/state.json >/dev/null 2>&1 || return 1
+    jq -e '.agent."gentle-orchestrator"' ~/.config/opencode/opencode.json >/dev/null 2>&1 || return 1
 }
 
 # VERIFICACIÓN PRIMERO: si otra corrida anterior (este u otro proyecto en la
@@ -313,22 +343,30 @@ algo falla:
 - `gentle-ai doctor` reporta sano
 - `engram version` y ciclo save/search/delete de prueba
 - La config de OpenCode contiene el orquestador de gentle-ai y el perfil
-  ${PROFILE_NAME} con los modelos de stack.conf (validar con jq contra los
-  archivos reales que gentle-ai genera; ubicación exacta según fase de
-  investigación)
-- Los modelos configurados responden: para cada modelo del perfil, un chequeo
-  liviano (comando de gentle-ai/OpenCode para probar o listar modelos
-  configurados — confirmar cuál existe en fase de investigación) confirma que el
-  proveedor es alcanzable. WARN (no FAIL) si un modelo no responde, listando
-  modelo y proveedor para que el usuario revise su API key.
+  ${PROFILE_NAME} con los modelos de stack.conf. Rutas confirmadas:
+  `~/.config/opencode/opencode.json` (orquestador en `.agent."gentle-orchestrator"`,
+  modelo por fase en `.agent."sdd-{phase}-${PROFILE_NAME}".model` — ej.
+  `.agent."sdd-design-${PROFILE_NAME}".model`) y `~/.gentle-ai/state.json`
+  (`.installed_agents` para confirmar que gentle-ai sabe que gestiona OpenCode).
+- Los modelos configurados responden: para cada modelo del perfil, confirmar
+  que aparece en el listado de `opencode models` (sin `--refresh` — ese flag
+  intenta refrescar contra el proveedor real y puede colgarse minutos si no
+  hay proveedores configurados; la lista sin refrescar ya sirve para el
+  chequeo). WARN (no FAIL) si un modelo no aparece, listando modelo y
+  proveedor para que el usuario revise su API key.
 - `rtk --version`, `rtk gain` y `rtk init --show` confirman binario y plugin
   (si WITH_RTK)
 - La config de rtk contiene las entradas de templates/rtk-config.toml
 - AGENTS.md del proyecto contiene los delimitadores de stack-optimizacion
-- El proyecto quedó registrado en SDD (`/sdd-init` + `gentle-ai skill-registry
-  refresh` aplicados) — WARN (no FAIL) si falta, con instrucción de correr esos
-  dos pasos, ya que no bloquean el resto del stack (comando exacto de
-  verificación: confirmar en fase de investigación, sección 8.1)
+- El proyecto quedó registrado en SDD — WARN (no FAIL) si falta, con
+  instrucción de correr `/sdd-init` + `gentle-ai skill-registry refresh`, ya
+  que no bloquean el resto del stack. Check confirmado: existencia de
+  `.atl/skill-registry.md` + `.atl/.skill-registry.cache.json` (escritos por
+  `gentle-ai skill-registry refresh`, con contrato de archivo estable) y que
+  el cache JSON parsea con una key `fingerprint` no nula. `openspec/config.yaml`
+  (el artefacto que en teoría escribe `/sdd-init`) es solo informativo — su
+  formato es "prompt-driven", no un contrato de archivo garantizado por
+  gentle-ai, así que su ausencia NUNCA es FAIL ni WARN.
 - Si WITH_BDD=true: existe ${BDD_DIR}/ o se imprime WARN (no FAIL) con
   instrucción de crearlo — la ausencia de .features no rompe nada, el flujo BDD
   queda latente
@@ -339,15 +377,25 @@ algo falla:
 La contracara de depender de gentle-ai: sus upgrades traen mejoras de prompts pero
 pueden cambiar comportamiento. Protocolo:
 
-1. Mostrar la versión actual y la última disponible de gentle-ai; imprimir el link
-   a sus release notes y PAUSAR: "Lee los cambios antes de continuar [Enter]".
-2. `gentle-ai upgrade` (aprovecha sus backups automáticos).
-3. Actualizar rtk por su mecanismo oficial (si WITH_RTK).
+1. Mostrar la versión actual (`gentle-ai version`) y correr `gentle-ai update`
+   (comando de solo-chequeo, confirmado — no muta nada) para ver la última
+   disponible; imprimir el link a las release notes
+   (`https://github.com/Gentleman-Programming/gentle-ai/releases`) y PAUSAR:
+   "Lee los cambios antes de continuar [Enter]".
+2. `gentle-ai upgrade` (comando de aplicar-cambios confirmado, distinto de
+   `update`; hace su propio backup automático antes de tocar nada — visible en
+   su output como "Creating pre-upgrade backup"). Si falla (ej. su propio
+   chequeo de versión no pudo completarse), abortar con el error tal cual —
+   gentle-ai no aplica nada si no pudo chequear versiones.
+3. Actualizar rtk por su mecanismo oficial (si WITH_RTK) — no tiene subcomando
+   de self-update; el mecanismo oficial es re-correr el mismo script de
+   instalación, que descarga y sobreescribe con la última release.
 4. Re-aplicar el bloque de AGENTS.md (idempotente — por si el formato del bloque
    cambió en una versión nueva de opencode-godmode).
 5. Correr `verify.sh` completo y mostrar el resultado.
 6. Recordar en pantalla: reiniciar OpenCode y, ante comportamiento raro post-
-   upgrade, restaurar desde los backups de gentle-ai (indicar cómo).
+   upgrade, `gentle-ai restore` (comando confirmado) para restaurar desde los
+   backups automáticos de gentle-ai.
 
 ### 4.5 VERIFY-AGENT.md — humo con agente (< 1.500 tokens)
 
@@ -369,17 +417,31 @@ Recortar redacción de otras pruebas si hace falta.
 
 ### 4.6 uninstall.sh
 
-- Remover bloque de AGENTS.md (entre delimitadores, sin tocar el resto).
-- `rtk init -g --uninstall` + ofrecer borrar el binario y ~/.config/rtk.
-- Para gentle-ai: NO desinstalarlo silenciosamente — preguntar. Si el usuario
-  acepta, seguir el procedimiento oficial de gentle-ai (documentarlo desde la fase
-  de investigación) y recordar que sus backups permiten restaurar.
-- NO borrar `~/.engram/engram.db` por defecto — las memorias son datos del
-  usuario; pedir confirmación explícita.
+- **Remover bloque de AGENTS.md por delimitadores es el default** (sin tocar
+  el resto) — NO restaurar el backup más reciente por defecto para este
+  archivo. Razón confirmada probando el flujo completo: `backup_if_changed`
+  solo respalda un archivo que YA existe; la primera vez que install.sh crea
+  AGENTS.md desde cero no hay nada que respaldar, así que el primer backup
+  que llega a existir (recién en la segunda modificación) ya tiene nuestro
+  propio bloque adentro — "restaurar el más reciente" no deshace nada en ese
+  caso. Restaurar-desde-backup-completo queda como alternativa explícita y
+  SOLO interactiva (nunca automática ni siquiera con `--yes`, para no
+  reintroducir el mismo problema en corridas no-interactivas).
+- `rtk init -g --uninstall` + ofrecer borrar el binario y ~/.config/rtk. Para
+  este archivo sí corresponde restaurar-desde-backup por defecto (no hay
+  delimitadores en TOML para poder hacer un strip quirúrgico como en
+  AGENTS.md).
+- Para gentle-ai: NO desinstalarlo silenciosamente — preguntar, incluso con
+  `--yes`. Si el usuario acepta: `gentle-ai uninstall --agent opencode --yes`
+  (comando confirmado — `--all` es mutuamente excluyente con `--agent` y
+  gentle-ai lo rechaza con error si se combinan; esto remueve todo lo
+  gestionado para ESE agente sin tocar otros agentes que gentle-ai pueda
+  tener configurados en la misma máquina, y sin tocar el binario de
+  gentle-ai). Recordar que sus backups automáticos permiten restaurar con
+  `gentle-ai restore`.
+- NO borrar `~/.engram` por defecto — las memorias son datos del
+  usuario; pedir confirmación explícita, incluso con `--yes`.
 - NUNCA tocar ${BDD_DIR}/ — los .feature son artefactos del usuario.
-- Restaurar por defecto el backup con timestamp más reciente de la fase 2 para
-  cada archivo tocado (AGENTS.md, rtk-config.toml); ofrecer listar los backups
-  existentes con su fecha y elegir uno distinto si el usuario lo pide.
 
 ## 5. Especificación del bloque AGENTS.md (el artefacto propio más importante)
 
@@ -470,23 +532,22 @@ conversación, gana el usuario."
 
 ## 8. Fases de construcción (para Claude Code)
 
-1. **Investigación (45 min máx):** contra la documentación y el repo actual de
-   gentle-ai: (a) ¿existe instalación/selección de agente no-interactiva por CLI o
-   variables de entorno?; (b) nombres exactos de las fases SDD para
-   `--profile-phase`, y si `sdd-implement` existe como fase independiente o
-   siempre hereda del perfil base (el runbook manual asume lo segundo — ver
-   4.2 paso 6); (c) ubicación y formato de los archivos que genera para OpenCode
-   (para que verify.sh los valide con jq); (d) comando de versión y
-   procedimiento oficial de desinstalación; (e) cómo confirmar
-   programáticamente, sin preguntarle al humano, que un proyecto quedó
-   registrado tras `/sdd-init` + `gentle-ai skill-registry refresh` (para el
-   check WARN de verify.sh en 4.3); (f) comando de gentle-ai/OpenCode para
-   probar o listar los modelos ya configurados en un perfil (para el chequeo
-   WARN de modelos en verify.sh, 4.3); (g) forma más simple de leer y escribir
-   TOML con python3 stdlib sin dependencias externas, para el merge de
-   rtk-config.toml (paso 7 de 4.2). Además: flags actuales de `rtk init`.
-   Registrar TODO en DECISIONS.md; los hallazgos de (a)-(g) mandan sobre lo
-   asumido en este plan.
+1. **Investigación — COMPLETADA.** Los hallazgos completos, con fuentes citadas
+   y cross-checks contra los binarios reales, están en `DECISIONS.md` (incluye
+   dos addenda con bugs encontrados solo por ejecutar de verdad, no por leer
+   documentación). Resumen de las preguntas originales, todas resueltas:
+   (a) `gentle-ai install --agent opencode --preset ... --scope=global` es
+   100% no-interactivo — confirmado, es el camino primario de 4.2 paso 4;
+   (b) las 10 fases SDD son init/explore/propose/spec/design/tasks/**apply**
+   (esto es "implementar" — `sdd-implement` no existe)/**verify** (esto es
+   "review" — `sdd-review` no existe, confirmado con el error real de
+   gentle-ai)/archive/onboard — `sdd-apply` es de primera clase, sin herencia
+   especial más allá de la de cualquier fase sin asignar; (c) ubicación y
+   formato de archivos en 4.3; (d) `gentle-ai version`/`--version`/`-v`,
+   desinstalación en 4.6; (e) `.atl/skill-registry.md` +
+   `.atl/.skill-registry.cache.json` en 4.3; (f) `opencode models` en 4.3;
+   (g) estrategia de merge TOML en 4.2 paso 7. Además: `rtk init -g --opencode
+   --auto-patch` confirmado no-interactivo.
 2. **templates/:** redactar AGENTS.md.block (sección 5, con bloques condicionales
    BDD y medición del largo) y rtk-config.toml. Es el entregable de mayor valor:
    máximo cuidado en la redacción.
