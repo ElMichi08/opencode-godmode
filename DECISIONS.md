@@ -542,6 +542,62 @@ not `~/.local/bin`. Never reference `sst/opencode` in user-facing text; use `ope
 
 ---
 
+## Addendum — corrections found by actually running install.sh (main session)
+
+Found by real execution against a live gentle-ai 2.3.0 in the WSL Ubuntu test
+environment, not by web research. Recorded here because they contradict both
+PLAN.md and parts of the research above:
+
+- **There is no `sdd-review` phase.** PLAN.md's step 6 originally said to sync
+  `sdd-design` and `sdd-review` as the two "capable model" phases. `sdd-review`
+  does not exist — `gentle-ai sync --profile-phase <name>:sdd-review:<model>`
+  fails with `unknown phase "sdd-review"; valid phases are: [sdd-init
+  sdd-explore sdd-propose sdd-spec sdd-design sdd-tasks sdd-apply sdd-verify
+  sdd-archive sdd-onboard jd-judge-a jd-judge-b jd-fix-agent]` (exact error
+  text from gentle-ai itself). The review/gate phase is **`sdd-verify`**.
+  install.sh now syncs `sdd-verify` for `MODEL_REVIEW`. This is the same class
+  of mistake as the `sdd-implement`→`sdd-apply` correction in (b) above — I
+  should have cross-checked PLAN.md's phase names against my own findings in
+  (b) instead of copying PLAN.md's text as-is; only caught it because I ran
+  the real command instead of trusting the plan.
+- **`opencode.json`'s orchestrator key is nested, not top-level.** The real
+  shape is `{"agent": {"gentle-orchestrator": {...}, ...}, "default_agent":
+  ..., "mcp": ..., "permission": ..., "share": ...}`. A `jq -e
+  '."gentle-orchestrator"'` check against the file root always fails; it must
+  be `jq -e '.agent."gentle-orchestrator"'`.
+- **gentle-ai's and rtk's installers put binaries in `~/.local/bin` without
+  ever touching shell rc files** (unlike OpenCode's installer, which does
+  append to `.bashrc`). install.sh now unconditionally prepends
+  `$HOME/.local/bin` to `PATH` near the top of the script, otherwise a second
+  run from a shell that never sourced an updated `.bashrc` would think
+  gentle-ai/rtk aren't installed and redundantly reinstall (breaks principle 4
+  and 9). gentle-ai's own installer output claims the `engram` binary lives at
+  `~/go/bin` — that was misleading in this environment; `which engram` showed
+  `~/.local/bin/engram`, already covered by the same PATH fix.
+- **Real `engram` CLI syntax is nothing like PLAN.md's `mem_save`/`mem_search`
+  assumption** (those are the *MCP tool names* the agent calls, not the
+  standalone CLI's flags — a distinction PLAN.md's "ciclo save/search/delete
+  con la CLI de engram" glossed over and the research phase didn't catch
+  either). Confirmed live:
+  ```bash
+  engram save <title> <msg> [--type TYPE] [--project PROJECT] [--scope SCOPE]
+  engram search <query> [--type TYPE] [--project PROJECT] [--scope SCOPE] [--limit N]
+  engram delete <obs_id> [--hard]     # obs_id parsed from `save`'s "Memory saved: #<id> ..." output
+  engram version                      # exists and works (also `engram --version`)
+  ```
+  install.sh's smoke cycle now uses this real syntax, parsing the id with
+  `grep -oE '#[0-9]+'` on `save`'s stdout.
+- **`gentle-ai install --agent opencode --preset full-gentleman --sdd-mode
+  multi --scope=global` genuinely works non-interactively** as (a) predicted —
+  confirmed live: 64/64 file checks passed, real `opencode.json` written with
+  `gentle-orchestrator` present, `sdd-apply.md` etc. all created. The
+  `full-gentleman` preset also pulls in `gga` ("Gentleman Guardian Angel", a
+  separate git-hook tool) as a side effect — not mentioned anywhere in
+  PLAN.md, but it's exactly what depending on gentle-ai's bundled ecosystem
+  (principle 2) means; left as-is rather than trying to exclude it via a
+  narrower `--component` list, since the plan explicitly prioritizes riding
+  gentle-ai's own preset curation over hand-picking components.
+
 ## Summary of naming corrections needed vs. the original plan
 
 | Original assumption | Correct value |
