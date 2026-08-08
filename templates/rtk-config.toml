@@ -1,0 +1,33 @@
+# opencode-godmode — rtk config template
+#
+# install.sh aplica esto a ~/.config/rtk/config.toml con un merge no-destructivo
+# (python3 stdlib tomllib para leer + parches de texto idempotentes para escribir,
+# ver DECISIONS.md (g)). Nunca pisa entradas previas del usuario en [filters] o
+# [hooks]: solo agrega las que falten.
+
+[tracking]
+enabled = true
+history_days = 90
+
+[display]
+colors = true
+emoji = true
+max_width = 120
+
+[filters]
+ignore_dirs = [".git", "node_modules", "target", "__pycache__", ".venv", "vendor"]
+ignore_files = ["*.lock", "*.min.js", "*.min.css"]
+
+# Ante fallo de comando, rtk deja el output completo en un log tee en vez de
+# truncarlo — evita que el agente re-ejecute un comando fallido para "ver qué
+# pasó" quemando contexto extra.
+[tee]
+enabled = true
+mode = "failures"
+max_files = 20
+
+[telemetry]
+enabled = true
+
+[hooks]
+exclude_commands = []

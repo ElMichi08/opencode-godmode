@@ -1,0 +1,67 @@
+<!-- stack-optimizacion:begin -->
+Reglas de opencode-godmode — complementan la configuración de gentle-ai. Ante
+conflicto con una instrucción explícita del usuario en la conversación, gana
+el usuario.
+
+## Compresión por rol
+
+- **Exploración:** reportes en fragmentos, sin saludos ni preámbulos, una
+  línea por hallazgo con `path:línea`. Cerrá con `ABIERTO:` listando lo no
+  encontrado. Ejemplo:
+  ```
+  src/auth/session.ts:42 — token se firma sin expiración
+  src/auth/middleware.ts:18 — no valida audience
+  ABIERTO: no se encontró dónde se invalida el token en logout
+  ```
+- **Implementación:** prosa mínima; reporte final de un archivo por línea +
+  resultado de tests. Nunca comprimir código, mensajes de error literales, ni
+  paths — la compresión aplica a la prosa, no a la sustancia.
+- **Orquestador y fases de diseño/review:** estilo explicativo normal de
+  gentle-ai; estas reglas de compresión NO les aplican.
+
+<!-- IF WITH_RTK -->
+## rtk
+
+- El hook intercepta solo el tool Bash; para output largo preferí comandos
+  acotados o `rtk read/grep/find` explícitos en vez de volcar todo.
+- Ante fallo de un comando, leé el log tee completo que rtk indica en vez de
+  re-ejecutar el comando para "ver qué pasó".
+<!-- END WITH_RTK -->
+
+## Memoria (Engram)
+
+- Al cerrar trabajo significativo (bugfix no trivial, decisión de
+  arquitectura, causa raíz encontrada): `mem_save` con qué / por qué / dónde /
+  qué se aprendió.
+- Al arrancar una tarea sobre un área ya trabajada: `mem_search` ANTES de
+  explorar el código — re-explorar lo ya conocido es el desperdicio más caro.
+- No guardes trivialidades (typos, renombres, cambios de formato).
+
+<!-- IF WITH_BDD -->
+## BDD (__BDD_DIR__/)
+
+- Los `.feature` bajo `__BDD_DIR__/` son la fuente de verdad del
+  comportamiento. Ante conflicto entre el chat y un `.feature`, señalalo
+  antes de proceder.
+- Al iniciar una tarea, cargá SOLO los escenarios pertinentes; citalos por
+  `archivo.feature / Escenario: nombre` (y tag, ej. `@HU-07`) — nunca pegues
+  `.feature` completos en reportes ni specs.
+- La spec de diseño incluye tabla de trazabilidad escenario → decisión →
+  criterio de aceptación; escenarios ambiguos se reportan al usuario, no se
+  reescriben.
+- Cada test que cubre un escenario lleva comentario `# Cubre:
+  archivo/escenario`; el review rechaza si hay escenarios en alcance sin test
+  que pase, listándolos.
+- Los agentes no crean ni editan archivos `.feature`.
+<!-- END WITH_BDD -->
+
+## Higiene de contexto
+
+- Respetá los triggers de delegación de gentle-ai: 4+ archivos para entender
+  un flujo → delegar exploración; 2+ archivos no triviales → un solo writer y
+  review fresco antes de cerrar.
+- Ante sesión larga con señales de degradación (contradicciones, olvidos),
+  proponé guardar estado en Engram (`mem_session_end`) y continuar en sesión
+  fresca.
+- No pegues archivos completos en el contexto cuando un extracto alcanza.
+<!-- stack-optimizacion:end -->
