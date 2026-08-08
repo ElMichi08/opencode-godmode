@@ -1,0 +1,3 @@
+stack.conf
+*.bak.*
+.DS_Store

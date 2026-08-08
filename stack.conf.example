@@ -1,0 +1,26 @@
+# opencode-godmode — stack.conf
+#
+# Copiá este archivo a stack.conf (o dejá que install.sh lo genere de forma
+# interactiva) y completá los valores. install.sh busca ./stack.conf; si no
+# existe, lo genera preguntando por estos mismos valores con defaults sensatos.
+
+# Nombre del perfil SDD que gentle-ai creará. El stack (gentle-ai/Engram/rtk) es
+# global a la máquina, pero el perfil es por-proyecto: usá un nombre que no
+# choque con el de otro proyecto en la misma máquina.
+# Default sugerido por el generador interactivo: "godmode-<directorio actual>".
+PROFILE_NAME="godmode-mi-proyecto"
+
+# Modelos por fase SDD (formato proveedor/modelo, sintaxis OpenCode/gentle-ai).
+# Los tres siguientes son obligatorios: install.sh aborta si alguno queda vacío.
+MODEL_EXPLORE=""         # barato/gratis — ej: openrouter/qwen/qwen3-30b-a3b:free
+MODEL_DESIGN=""          # capaz — ej: anthropic/claude-sonnet-4-6
+MODEL_REVIEW=""          # capaz — default sugerido: igual a MODEL_DESIGN
+
+# Opcional. Vacío = hereda MODEL_EXPLORE (igual que el runbook manual
+# SETUP-STACK.md). Solo setealo si querés un modelo distinto al de exploración
+# para la fase de implementación.
+MODEL_IMPLEMENT=""
+
+WITH_RTK=true            # compresión de output bash
+WITH_BDD=true            # activa las reglas BDD en AGENTS.md.block
+BDD_DIR="features"       # directorio de .feature relativo a la raíz del proyecto
