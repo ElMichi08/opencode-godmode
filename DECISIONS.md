@@ -629,6 +629,35 @@ uninstall.sh (interactive, all six prompt paths exercised including real
 gentle-ai/Engram removal) → verify.sh (correctly shows FAILs for the removed
 pieces) → install.sh again → verify.sh (14 PASS/4 WARN/0 FAIL again).
 
+## Addendum 3 — gentle-ai's real update/upgrade/restore commands (for upgrade.sh)
+
+`gentle-ai --help`'s command list (confirmed live, not documented anywhere I
+found in the repo's markdown docs — only discoverable by running `--help`)
+includes, at the bottom:
+```
+update       Check for available updates   (read-only, safe to run any time)
+upgrade      Apply updates to managed tools (mutates; creates its own
+                                              pre-upgrade backup automatically,
+                                              confirmed live: "Creating
+                                              pre-upgrade backup" in output)
+restore      Restore a config backup
+version      Print version                  (also: gentle-ai --version, -v)
+```
+`gentle-ai upgrade` aborts entirely if its update check fails (e.g. GitHub API
+rate-limiting, which is what happened in this sandboxed test environment —
+external limitation, not a bug) rather than proceeding with partial/cached
+info. upgrade.sh treats that as a hard failure and stops, matching PLAN.md
+6's "ante error, imprimir en qué paso falló". `gentle-ai restore` and `gentle-ai
+help restore` don't expose a dedicated flag reference (subcommand `help X`
+just reprints the global help in this version) — upgrade.sh's final summary
+tells the user to run `gentle-ai restore` bare and follow its own prompts,
+rather than guessing flags that weren't confirmed.
+
+rtk has no dedicated self-update/upgrade subcommand (`rtk update --help`,
+`rtk self-update --help`, `rtk upgrade --help` all error). upgrade.sh updates
+it the same way install.sh installs it fresh: re-running the official curl
+script, which downloads and overwrites with the latest release.
+
 ## Summary of naming corrections needed vs. the original plan
 
 | Original assumption | Correct value |
