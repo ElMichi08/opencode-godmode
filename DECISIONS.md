@@ -598,6 +598,37 @@ PLAN.md and parts of the research above:
   narrower `--component` list, since the plan explicitly prioritizes riding
   gentle-ai's own preset curation over hand-picking components.
 
+## Addendum 2 — bugs found while building and testing uninstall.sh
+
+- **`gentle-ai uninstall --agent opencode --all` is rejected.** gentle-ai's own
+  error: `Error: --all cannot be combined with --agent/--agents or
+  --component/--components`. `--all` and `--agent` are mutually exclusive
+  (confirmed in (d) above but I still wrote the combined form first and only
+  caught it by actually running it). Fixed to `gentle-ai uninstall --agent
+  opencode --yes` (no `--component` = removes everything managed for that one
+  agent, without touching other agents gentle-ai might manage on the same
+  machine).
+- **"Restore the most recent backup" is not a correct default for AGENTS.md.**
+  `backup_if_changed` only ever backs up a file that already exists — so for
+  a project where opencode-godmode created AGENTS.md from nothing, the first
+  backup ever taken (on the *second* install.sh run) already contains our own
+  block, because there was never a run where the file existed in a genuinely
+  pristine, pre-block state for backup_if_changed to capture. Confirmed by
+  testing: restoring "the latest backup" during uninstall left the block
+  fully intact. Fixed by making delimiter-stripping (`sed`/`awk` between
+  `<!-- stack-optimizacion:begin/end -->`) the default and only interactively
+  offering full-backup-restore as an explicit opt-in (never auto-selected
+  under `--yes`, since defaulting to it would silently reintroduce this bug
+  for scripted/non-interactive runs). This asymmetry between AGENTS.md
+  (strip-by-default) and rtk-config.toml (restore-by-default, since an
+  additive TOML merge has no delimiters to strip) is intentional and
+  documented inline in uninstall.sh.
+
+Full cycle verified live: install → verify.sh (14 PASS/4 WARN/0 FAIL) →
+uninstall.sh (interactive, all six prompt paths exercised including real
+gentle-ai/Engram removal) → verify.sh (correctly shows FAILs for the removed
+pieces) → install.sh again → verify.sh (14 PASS/4 WARN/0 FAIL again).
+
 ## Summary of naming corrections needed vs. the original plan
 
 | Original assumption | Correct value |
